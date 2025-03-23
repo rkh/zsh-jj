@@ -1,0 +1,8 @@
+setopt localoptions NO_shwordsplit
+
+[[ $1 == '--flavours' ]] && return 1
+
+VCS_INFO_check_com jj || return 1
+vcs_comm[detect_need_file]=working_copy
+VCS_INFO_bydir_detect '.jj'
+return $?

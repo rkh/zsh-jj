@@ -1,0 +1,34 @@
+setopt localoptions NO_shwordsplit
+
+local action branch base staged unstaged revision misc
+local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _parent_id
+
+eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never \
+  -r "coalesce(ancestors(present(@)) & bookmarks(), root())" \
+  -T '
+    separate(" ",
+      "_bookmark_id=" ++ change_id,
+      "_is_working_copy=" ++ current_working_copy,
+      "_is_root=" ++ root,
+      "branch=\"" ++ bookmarks.join(" ") ++ "\"",
+    )
+  '`
+
+eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never -r "@" \
+  -T '
+    separate(" ",
+      "revision=\"" ++ change_id.shortest() ++ "\"",
+      "_parent_id=\"" ++ parents.map(|c| c.change_id()).join("-") ++ "\"",
+      if(empty, "", "unstaged=true"),
+      if(conflict, "action=conflict")
+    )'`
+
+if [[ $_is_working_copy == "false" && $_bookmark_id != $_parent_id ]]; then
+  staged=true
+fi
+
+if [[ $_is_root == "true" ]]; then
+  branch="root()"
+fi
+
+VCS_INFO_formats "${action}" "${branch}" "${base}" "${staged}" "${unstaged}" "${revision}" "${misc}"
