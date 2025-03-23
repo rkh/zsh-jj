@@ -1,4 +1,4 @@
-# Z Shell support for Jujutsu
+# Jujutsu support for Z Shell 
 
 This repository contains two things:
 
