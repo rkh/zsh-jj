@@ -3,7 +3,7 @@ setopt localoptions NO_shwordsplit
 local action branch base staged unstaged revision misc
 local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _parent_id
 
-eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never \
+eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
   -r "coalesce(ancestors(present(@)) & bookmarks(), root())" \
   -T '
     separate(" ",
@@ -14,7 +14,7 @@ eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never \
     )
   '`
 
-eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never -r "@" \
+eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never -r "@" \
   -T '
     separate(" ",
       "revision=\"" ++ change_id.shortest() ++ "\"",
