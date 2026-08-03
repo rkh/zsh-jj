@@ -2,7 +2,7 @@ setopt localoptions NO_shwordsplit
 
 local base=${vcs_comm[basedir]}
 local action branch staged unstaged revision misc
-local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _parent_id
+local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _parent_id _diff_status
 
 # --ignore-working-copy is safe here: bookmarks are persisted state
 eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
@@ -23,7 +23,8 @@ eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never -r "@" \
       "revision=\"" ++ change_id.shortest() ++ "\"",
       "_parent_id=\"" ++ parents.map(|c| c.change_id()).join("-") ++ "\"",
       if(empty, "", "unstaged=true"),
-      if(conflict, "action=conflict")
+      if(conflict, "action=conflict"),
+      if(!empty, "_diff_status=\"" ++ self.diff().files().map(|f| f.status_char()).join("") ++ "\"")
     )'`
 
 if [[ $_is_working_copy == "false" && $_bookmark_id != $_parent_id ]]; then
@@ -36,17 +37,12 @@ fi
 
 [[ $action == "conflict" ]] && action='⚡'
 
-if [[ $unstaged == "true" ]]; then
-  local summary m a d changes
-  summary=$(${vcs_comm[cmd]} diff --summary --no-pager --color never 2>/dev/null)
-  read m a d < <(awk '
-    /^M / {m++}
-    /^A / {a++}
-    /^D / {d++}
-    END {print m+0, a+0, d+0}
-  ' <<< "$summary")
+if [[ -n $_diff_status ]]; then
+  local m=${#${_diff_status//[^M]/}}
+  local a=${#${_diff_status//[^A]/}}
+  local d=${#${_diff_status//[^D]/}}
 
-  changes=''
+  local changes=''
   (( m )) && changes+="M${m}"
   (( a )) && changes+="${changes:+|}A${a}"
   (( d )) && changes+="${changes:+|}D${d}"
