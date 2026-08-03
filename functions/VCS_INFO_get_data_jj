@@ -56,7 +56,7 @@ fi
 if [[ $_is_root == "false" && -n $_bookmark_id ]]; then
   local local_ahead
   local_ahead=$(${vcs_comm[cmd]} log --ignore-working-copy \
-    -r "${_bookmark_id}..@" --count 2>/dev/null)
+    -r "${_bookmark_id}..@ ~ empty()" --count 2>/dev/null)
   local_ahead=${local_ahead//[[:space:]]/}
   (( local_ahead > 0 )) && misc+="${misc:+ }↑${local_ahead}"
 
