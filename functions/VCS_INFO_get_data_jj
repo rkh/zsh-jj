@@ -41,11 +41,15 @@ if [[ -n $_diff_status ]]; then
   local m=${#${_diff_status//[^M]/}}
   local a=${#${_diff_status//[^A]/}}
   local d=${#${_diff_status//[^D]/}}
+  local r=${#${_diff_status//[^R]/}}
+  local c=${#${_diff_status//[^C]/}}
 
   local changes=''
   (( m )) && changes+="M${m}"
   (( a )) && changes+="${changes:+|}A${a}"
   (( d )) && changes+="${changes:+|}D${d}"
+  (( r )) && changes+="${changes:+|}R${r}"
+  (( c )) && changes+="${changes:+|}C${c}"
   [[ -n $changes ]] && misc="[${changes}]"
 fi
 
