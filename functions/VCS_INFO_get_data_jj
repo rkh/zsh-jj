@@ -2,7 +2,8 @@ setopt localoptions NO_shwordsplit
 
 local base=${vcs_comm[basedir]}
 local action branch staged unstaged revision misc
-local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _parent_id _diff_status
+local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _bookmark_name _parent_id _diff_status
+local _track_ahead _track_behind
 
 # --ignore-working-copy is safe here: bookmarks are persisted state
 eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
@@ -13,6 +14,7 @@ eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
       "_is_working_copy=" ++ current_working_copy,
       "_is_root=" ++ root,
       "branch=\"" ++ bookmarks.join(" ") ++ "\"",
+      if(local_bookmarks.len() > 0, "_bookmark_name=\"" ++ local_bookmarks.first().name() ++ "\""),
     )
   '`
 
@@ -60,19 +62,23 @@ if [[ $_is_root == "false" && -n $_bookmark_id ]]; then
   local_ahead=${local_ahead//[[:space:]]/}
   (( local_ahead > 0 )) && misc+="${misc:+ }↑${local_ahead}"
 
-  local branch_name="${branch%% *}"
-  if [[ -n $branch_name ]]; then
-    local bm_output remote_behind remote_ahead tracking
-    bm_output=$(${vcs_comm[cmd]} bookmark list --all-remotes "$branch_name" 2>/dev/null)
-    remote_behind=0; remote_ahead=0
-    # "behind by N" = remote behind us → we are ahead
-    [[ $bm_output =~ 'behind by ([0-9]+)' ]] && remote_behind=$match[1]
-    # "ahead by N" = remote ahead of us → we are behind
-    [[ $bm_output =~ 'ahead by ([0-9]+)' ]] && remote_ahead=$match[1]
+  if [[ -n $_bookmark_name ]]; then
+    # remote_bookmarks() (the revset function) excludes the colocated @git
+    # pseudo-remote by default, so this resolves to wherever the real
+    # tracked remote(s) point — which, once diverged, is a different
+    # commit than $_bookmark_id. self.remote_bookmarks() (the per-commit
+    # template method) is then unambiguous at that commit.
+    eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
+      -r "remote_bookmarks(exact:\"${_bookmark_name}\")" \
+      -T '
+        separate(" ",
+          "_track_ahead=" ++ self.remote_bookmarks().first().tracking_ahead_count().lower(),
+          "_track_behind=" ++ self.remote_bookmarks().first().tracking_behind_count().lower()
+        )'`
 
-    tracking=''
-    (( remote_behind > 0 )) && tracking+="⇡${remote_behind}"
-    (( remote_ahead > 0 ))  && tracking+="⇣${remote_ahead}"
+    local tracking=''
+    (( _track_behind > 0 )) && tracking+="⇡${_track_behind}"
+    (( _track_ahead > 0 ))  && tracking+="⇣${_track_ahead}"
     [[ -n $tracking ]] && misc+="${misc:+ }${tracking}"
   fi
 fi
