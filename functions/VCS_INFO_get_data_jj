@@ -37,19 +37,21 @@ fi
 [[ $action == "conflict" ]] && action='⚡'
 
 if [[ $unstaged == "true" ]]; then
-  local summary m a d changes
+  local summary m a d r changes
   summary=$(${vcs_comm[cmd]} diff --summary --no-pager --color never 2>/dev/null)
-  read m a d < <(awk '
+  read m a d r < <(awk '
     /^M / {m++}
     /^A / {a++}
     /^D / {d++}
-    END {print m+0, a+0, d+0}
+    /^R / {r++}
+    END {print m+0, a+0, d+0, r+0}
   ' <<< "$summary")
 
   changes=''
   (( m )) && changes+="M${m}"
   (( a )) && changes+="${changes:+|}A${a}"
   (( d )) && changes+="${changes:+|}D${d}"
+  (( r )) && changes+="${changes:+|}R${r}"
   [[ -n $changes ]] && misc="[${changes}]"
 fi
 
