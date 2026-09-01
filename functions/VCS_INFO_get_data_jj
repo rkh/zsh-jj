@@ -72,8 +72,8 @@ if [[ $_is_root == "false" && -n $_bookmark_id ]]; then
       -r "remote_bookmarks(exact:\"${_bookmark_name}\")" \
       -T '
         separate(" ",
-          "_track_ahead=" ++ self.remote_bookmarks().first().tracking_ahead_count().lower(),
-          "_track_behind=" ++ self.remote_bookmarks().first().tracking_behind_count().lower()
+          "_track_ahead=" ++ try(self.remote_bookmarks().first().tracking_ahead_count().lower(), 0),
+          "_track_behind=" ++ try(self.remote_bookmarks().first().tracking_behind_count().lower(), 0),
         )'`
 
     local tracking=''
