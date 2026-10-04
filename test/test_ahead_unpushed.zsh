@@ -9,12 +9,12 @@ source "${0:A:h}/lib.zsh"
 # which is too flaky to set up deterministically for a regression test.
 # It was verified manually during review instead.
 
-repo=$(new_repo)
+repo=$(new_repo) || exit 1
 remote_dir="${repo}.git"
 git init --bare "$remote_dir" >/dev/null 2>&1
 
 (
-  cd "$repo"
+  cd "$repo" || exit 1
   jj git remote add origin "$remote_dir" >/dev/null 2>&1
   print a >! f.txt
   jj commit -m c1 >/dev/null 2>&1
@@ -34,6 +34,4 @@ git init --bare "$remote_dir" >/dev/null 2>&1
 test_case "unpushed local commit shows ahead-of-remote marker"
 assert_vcs_info "$repo" "branch=main* staged= unstaged= misc=⇡1 rev=X action="
 
-cleanup_repo "$repo"
-command rm -rf "$remote_dir"
 summary_and_exit
