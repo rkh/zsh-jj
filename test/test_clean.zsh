@@ -2,13 +2,13 @@
 setopt localoptions NO_shwordsplit
 source "${0:A:h}/lib.zsh"
 
-repo=$(new_repo)
+repo=$(new_repo) || exit 1
 
 test_case "no bookmark, no changes"
 assert_vcs_info "$repo" "branch=root() staged= unstaged= misc= rev=X action="
 
 (
-  cd "$repo"
+  cd "$repo" || exit 1
   print a >! f.txt
   jj commit -m base >/dev/null 2>&1
   jj bookmark create main -r @ >/dev/null 2>&1
@@ -17,5 +17,4 @@ assert_vcs_info "$repo" "branch=root() staged= unstaged= misc= rev=X action="
 test_case "bookmark at @, no changes"
 assert_vcs_info "$repo" "branch=main staged= unstaged= misc= rev=X action="
 
-cleanup_repo "$repo"
 summary_and_exit

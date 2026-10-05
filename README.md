@@ -25,3 +25,9 @@ If you only want JJ support, but not the prompt, add the functions directory to 
 fpath+=/path/to/zsh-jujutsu/functions
 zstyle ':vcs_info:*' enable jj
 ```
+
+With `zstyle ':vcs_info:*' check-for-changes true` (set by the plugin), every prompt snapshots the working copy so file changes show up immediately; jj records each snapshot as an operation. Without it, the prompt reports the last snapshot taken by any jj command and never writes to the repository.
+
+Tested with jj 0.45. Older versions may lack template methods the backend relies on, in which case the prompt shows no jj details.
+
+Run the tests with `zsh test/run.zsh` (requires `jj` and `git`).

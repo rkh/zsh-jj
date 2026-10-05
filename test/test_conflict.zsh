@@ -2,10 +2,10 @@
 setopt localoptions NO_shwordsplit
 source "${0:A:h}/lib.zsh"
 
-repo=$(new_repo)
+repo=$(new_repo) || exit 1
 
 (
-  cd "$repo"
+  cd "$repo" || exit 1
   print base >! f.txt
   jj commit -m base >/dev/null 2>&1
   jj bookmark create main -r @- >/dev/null 2>&1
@@ -26,5 +26,4 @@ repo=$(new_repo)
 test_case "conflicted merge shows the conflict action marker"
 assert_vcs_info "$repo" "branch=main staged=S unstaged= misc=↑2 rev=X action=⚡"
 
-cleanup_repo "$repo"
 summary_and_exit

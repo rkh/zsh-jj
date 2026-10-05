@@ -2,10 +2,10 @@
 setopt localoptions NO_shwordsplit
 source "${0:A:h}/lib.zsh"
 
-repo=$(new_repo)
+repo=$(new_repo) || exit 1
 
 (
-  cd "$repo"
+  cd "$repo" || exit 1
   print a >! f.txt
   jj commit -m c1 >/dev/null 2>&1
   jj bookmark create main -r @- >/dev/null 2>&1
@@ -19,5 +19,4 @@ repo=$(new_repo)
 test_case "commit ahead of bookmark shows staged and ahead=1"
 assert_vcs_info "$repo" "branch=main staged=S unstaged= misc=↑1 rev=X action="
 
-cleanup_repo "$repo"
 summary_and_exit

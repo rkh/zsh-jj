@@ -2,85 +2,84 @@ setopt localoptions NO_shwordsplit
 
 local base=${vcs_comm[basedir]}
 local action branch staged unstaged revision misc
-local _is_working_copy _is_root _is_empty _bookmarks _bookmark_id _bookmark_name _parent_id _diff_status
-local _track_ahead _track_behind
+local -a fields
 
-# --ignore-working-copy is safe here: bookmarks are persisted state
-eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
-  -r "coalesce(ancestors(present(@)) & bookmarks(), root())" \
-  -T '
-    separate(" ",
-      "_bookmark_id=" ++ change_id,
-      "_is_working_copy=" ++ current_working_copy,
-      "_is_root=" ++ root,
-      "branch=\"" ++ bookmarks.join(" ") ++ "\"",
-      if(local_bookmarks.len() > 0, "_bookmark_name=\"" ++ local_bookmarks.first().name() ++ "\""),
-    )
-  '`
+# Output is split on NUL and assigned positionally, never eval'd: bookmark
+# names are attacker-controlled (fetched remotes) and may contain shell syntax.
+# Stderr is dropped so jj warnings don't print above every prompt.
+jj_fields() {
+  fields=("${(@0)$(${vcs_comm[cmd]} "$@" --color never 2>/dev/null)}")
+}
 
-# No --ignore-working-copy: forces snapshot so @ reflects on-disk state
-eval `${vcs_comm[cmd]} log -n 1 --no-graph --color never -r "@" \
-  -T '
-    separate(" ",
-      "revision=\"" ++ change_id.shortest() ++ "\"",
-      "_parent_id=\"" ++ parents.map(|c| c.change_id()).join("-") ++ "\"",
-      if(empty, "", "unstaged=true"),
-      if(conflict, "action=conflict"),
-      if(!empty, "_diff_status=\"" ++ self.diff().files().map(|f| f.status_char()).join("") ++ "\"")
-    )'`
+# check-for-changes decides whether to snapshot the working copy (which can
+# be slow and records a jj operation) or report the last snapshot.
+local -a snapshot=(--ignore-working-copy)
+zstyle -t ":vcs_info:${vcs}:${usercontext}:${rrn}" check-for-changes && snapshot=()
 
-if [[ $_is_working_copy == "false" && $_bookmark_id != $_parent_id ]]; then
-  staged=true
-fi
+jj_fields log $snapshot --no-graph -n 1 -r @ -T '
+  change_id.shortest() ++ "\0" ++
+  parents.map(|c| c.commit_id()).join(",") ++ "\0" ++
+  if(empty, "", "true") ++ "\0" ++
+  if(conflict, "true", "") ++ "\0" ++
+  if(empty, "", self.diff().files().map(|f| f.status_char()).join(""))'
+revision=$fields[1]
+local parent_ids=$fields[2]
+unstaged=$fields[3]
+[[ -n $fields[4] ]] && action='⚡'
+local diff_status=$fields[5]
 
-if [[ $_is_root == "true" ]]; then
-  branch="root()"
-fi
+# Commit ids, not change ids: a divergent change id is ambiguous in a revset.
+jj_fields log --ignore-working-copy --no-graph -n 1 \
+  -r 'coalesce(ancestors(present(@)) & bookmarks(), root())' -T '
+  commit_id ++ "\0" ++
+  current_working_copy ++ "\0" ++
+  root ++ "\0" ++
+  bookmarks.join(" ") ++ "\0" ++
+  if(local_bookmarks, local_bookmarks.first().name(), "")'
+local bookmark_id=$fields[1] is_working_copy=$fields[2] is_root=$fields[3]
+local bookmark_name=$fields[5]
+branch=$fields[4]
 
-[[ $action == "conflict" ]] && action='⚡'
+[[ $is_working_copy == false && $bookmark_id != $parent_ids ]] && staged=true
+[[ $is_root == true ]] && branch="root()"
 
-if [[ -n $_diff_status ]]; then
-  local m=${#${_diff_status//[^M]/}}
-  local a=${#${_diff_status//[^A]/}}
-  local d=${#${_diff_status//[^D]/}}
-  local r=${#${_diff_status//[^R]/}}
-  local c=${#${_diff_status//[^C]/}}
-
-  local changes=''
-  (( m )) && changes+="M${m}"
-  (( a )) && changes+="${changes:+|}A${a}"
-  (( d )) && changes+="${changes:+|}D${d}"
-  (( r )) && changes+="${changes:+|}R${r}"
-  (( c )) && changes+="${changes:+|}C${c}"
+if [[ -n $diff_status ]]; then
+  local changes='' kind count
+  for kind in M A D R C; do
+    count=${#${diff_status//[^$kind]/}}
+    (( count )) && changes+="${changes:+|}${kind}${count}"
+  done
   [[ -n $changes ]] && misc="[${changes}]"
 fi
 
-if [[ $_is_root == "false" && -n $_bookmark_id ]]; then
+if [[ $is_root == false && -n $bookmark_id ]]; then
   local local_ahead
   local_ahead=$(${vcs_comm[cmd]} log --ignore-working-copy \
-    -r "${_bookmark_id}..@ ~ empty()" --count 2>/dev/null)
+    -r "${bookmark_id}..@ ~ empty()" --count 2>/dev/null)
   local_ahead=${local_ahead//[[:space:]]/}
   (( local_ahead > 0 )) && misc+="${misc:+ }↑${local_ahead}"
 
-  if [[ -n $_bookmark_name ]]; then
-    # remote_bookmarks() (the revset function) excludes the colocated @git
-    # pseudo-remote by default, so this resolves to wherever the real
-    # tracked remote(s) point — which, once diverged, is a different
-    # commit than $_bookmark_id. self.remote_bookmarks() (the per-commit
-    # template method) is then unambiguous at that commit.
-    eval `${vcs_comm[cmd]} log --ignore-working-copy -n 1 --no-graph --color never \
-      -r "remote_bookmarks(exact:\"${_bookmark_name}\")" \
-      -T '
-        separate(" ",
-          "_track_ahead=" ++ self.remote_bookmarks().first().tracking_ahead_count().lower(),
-          "_track_behind=" ++ self.remote_bookmarks().first().tracking_behind_count().lower()
-        )'`
+  if [[ -n $bookmark_name ]]; then
+    # Filtered by name here rather than in a revset, so the name is never
+    # parsed by jj. If several remotes track it, the first wins.
+    jj_fields bookmark list --ignore-working-copy --tracked -T '
+      if(remote && remote != "git",
+        name ++ "\0" ++ tracking_ahead_count.lower() ++ "\0" ++
+        tracking_behind_count.lower() ++ "\0")'
+    local i remote_ahead=0 remote_behind=0
+    for (( i = 1; i + 2 <= $#fields; i += 3 )); do
+      if [[ $fields[i] == "$bookmark_name" ]]; then
+        remote_ahead=${fields[i+1]//[^0-9]} remote_behind=${fields[i+2]//[^0-9]}
+        break
+      fi
+    done
 
     local tracking=''
-    (( _track_behind > 0 )) && tracking+="⇡${_track_behind}"
-    (( _track_ahead > 0 ))  && tracking+="⇣${_track_ahead}"
+    (( remote_behind > 0 )) && tracking+="⇡${remote_behind}"
+    (( remote_ahead > 0 ))  && tracking+="⇣${remote_ahead}"
     [[ -n $tracking ]] && misc+="${misc:+ }${tracking}"
   fi
 fi
 
+unfunction jj_fields
 VCS_INFO_formats "${action}" "${branch}" "${base}" "${staged}" "${unstaged}" "${revision}" "${misc}"
